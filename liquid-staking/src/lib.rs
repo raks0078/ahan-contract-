@@ -1,3 +1,5 @@
+//! SPDX-License-Identifier: MIT
+
 use concordium_std::*; // Import Concordium standard library.
 use concordium_cis2::*; // Import Concordium CIS-2 library.
 
@@ -119,6 +121,17 @@ pub enum Error {
 
     /// Failed logging: Log is malformed.
     LogMalformed, // -13
+
+    /// Upgrade failed because the new module does not exist.
+    FailedUpgradeMissingModule, // -14
+
+    /// Upgrade failed because the new module does not contain a contract with a
+    /// matching name.
+    FailedUpgradeMissingContract, // -15
+
+    /// Upgrade failed because the smart contract version of the module is not
+    /// supported.
+    FailedUpgradeUnsupportedModuleVersion, // -16
 }
 
 /// Mapping the logging errors to Error.
@@ -139,6 +152,25 @@ impl From<Cis2ClientError<Error>> for Error {
             Cis2ClientError::ParseResult => Self::ParseResult,
             Cis2ClientError::InvalidResponse => Self::InvalidResponse,
         }
+    }
+}
+
+/// Mapping UpgradeError to Error
+impl From<UpgradeError> for Error {
+    #[inline(always)]
+    fn from(ue: UpgradeError) -> Self {
+        match ue {
+            UpgradeError::MissingModule => Self::FailedUpgradeMissingModule,
+            UpgradeError::MissingContract => Self::FailedUpgradeMissingContract,
+            UpgradeError::UnsupportedModuleVersion => Self::FailedUpgradeUnsupportedModuleVersion,
+        }
+    }
+}
+
+/// Mapping of errors related to contract invocations to CustomContractError.
+impl<T> From<CallContractError<T>> for Error {
+    fn from(_cce: CallContractError<T>) -> Self {
+        Self::InvokeContractError
     }
 }
 
@@ -497,7 +529,7 @@ fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractRe
     let params: UpgradeParams = ctx.parameter_cursor().get()?;
 
     // Trigger the upgrade.
-    host.upgrade(params.module).unwrap();
+    host.upgrade(params.module)?;
 
     // Call the migration function if provided.
     if let Some((func, parameters)) = params.migrate {
@@ -506,7 +538,7 @@ fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractRe
             parameters.as_parameter(),
             func.as_entrypoint_name(),
             Amount::zero()
-        ).unwrap();
+        )?;
     }
     Ok(())
 }
