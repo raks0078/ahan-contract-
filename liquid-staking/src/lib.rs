@@ -3,19 +3,14 @@
 use concordium_std::*; // Import Concordium standard library.
 use concordium_cis2::*; // Import Concordium CIS-2 library.
 
-/// The initial value of apr
+/// The initial value of APR
 const INITIAL_APR: u64 = 139;
 
-/// The default denominator of apr
-const APR_DENOMINATOR: u64 = 1_000_000_00;
+/// The default denominator of APR
+const APR_DENOMINATOR: u128 = 1_000_000_00;
 
-/// List of supported entrypoints by the `permit` function (CIS3 standard).
-const _SUPPORTS_PERMIT_ENTRYPOINTS: [EntrypointName; 4] = [
-    EntrypointName::new_unchecked("stake"),
-    EntrypointName::new_unchecked("unstake"),
-    EntrypointName::new_unchecked("claim_rewards"),
-    EntrypointName::new_unchecked("updateOperator"),
-];
+/// The ID of the EUROe token
+const TOKEN_ID_EUROE: ContractTokenId = TokenIdUnit();
 
 /// Upgrade parameters
 #[derive(Serialize, SchemaType)]
@@ -28,7 +23,7 @@ pub struct UpgradeParams {
 }
 
 /// InitContract parameters
-#[derive(Serialize, SchemaType, Clone)]
+#[derive(Serialize, SchemaType)]
 pub struct InitContractParams {
     /// The admin role of concordium liquid staking smart contract.
     pub admin: AccountAddress,
@@ -38,20 +33,10 @@ pub struct InitContractParams {
 
     /// Address of the CIS-2 EuroE token contract.
     pub token_address: ContractAddress,
-
-    /// The token Id
-    pub token_id: ContractTokenId,
-}
-
-/// Stake parameters
-#[derive(Serialize, SchemaType, Clone)]
-pub struct StakeParams {
-    /// Amount of tokens to stake.
-    pub amount: u64,
 }
 
 /// Withdraw parameters
-#[derive(Serialize, SchemaType, Clone)]
+#[derive(Serialize, SchemaType)]
 pub struct WithdrawEuroEParams {
     /// The address of withdrawable
     withdraw_address: AccountAddress,
@@ -75,54 +60,9 @@ pub struct UpdateAprParams {
     new_apr: u64,
 }
 
-/// Part of the parameter type for the contract function `permit`.
-/// Specifies the message that is signed.
-#[derive(SchemaType, Serialize)]
-pub struct PermitMessage {
-    /// The contract_address that the signature is intended for.
-    pub contract_address: ContractAddress,
-
-    /// A nonce to prevent replay attacks.
-    pub nonce: u64,
-
-    /// A timestamp to make signatures expire.
-    pub timestamp: Timestamp,
-
-    /// The entry_point that the signature is intended for.
-    pub entry_point: OwnedEntrypointName,
-
-    /// The serialized payload that should be forwarded to either the `transfer`
-    /// or the `updateOperator` function.
-    #[concordium(size_length = 2)]
-    pub payload: Vec<u8>,
-}
-
-/// The parameter type for the contract function `permit`.
-/// Takes a signature, the signer, and the message that was signed.
-#[derive(Serialize, SchemaType)]
-pub struct PermitParam {
-    /// Signature/s. The CIS3 standard supports multi-sig accounts.
-    pub signature: AccountSignatures,
-
-    /// Account that created the above signature.
-    pub signer: AccountAddress,
-
-    /// Message that was signed.
-    pub message: PermitMessage,
-}
-
-#[derive(Serialize)]
-pub struct PermitParamPartial {
-    /// Signature/s. The CIS3 standard supports multi-sig accounts.
-    signature: AccountSignatures,
-
-    /// Account that created the above signature.
-    signer: AccountAddress,
-}
-
 /// The parameter for the contract function `mint`
 /// which mints an amount of liquid EUROe to a given address.
-#[derive(Serial, Deserial, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct MintParams {
     /// The address of owner.
     pub owner: Address,
@@ -133,7 +73,7 @@ pub struct MintParams {
 
 /// The parameter for the contract function `burn`
 /// which burns an amount of liquid EUROe to a given address.
-#[derive(Serial, Deserial, SchemaType)]
+#[derive(Serialize, SchemaType)]
 pub struct BurnParams {
     /// The amount to burn liquid EuroE.
     pub amount: TokenAmountU64,
@@ -143,7 +83,7 @@ pub struct BurnParams {
 }
 
 /// View results
-#[derive(Serial, SchemaType, Clone)]
+#[derive(Serialize, SchemaType)]
 pub struct ViewResult {
     /// Paused state for stopping relevant contract operations.
     paused: bool,
@@ -157,14 +97,14 @@ pub struct ViewResult {
     /// The Apr.
     apr: u64,
 
-    /// Address of liquid Euroe token contract
+    /// Address of liquid euroe token contract
     liquid_euroe: ContractAddress,
 
-    /// Address of the CIS-2 EuroE token contract.
+    /// Address of the euroe token contract.
     token_address: ContractAddress,
 
-    /// The token Id
-    token_id: TokenIdU8,
+    /// The total number of participants
+    total_participants: u64,
 }
 
 /// Information about a stake.
@@ -187,7 +127,7 @@ struct State<S = StateApi> {
     /// The admin role of concordium liquid staking smart contract.
     admin: AccountAddress,
 
-    /// Total amount of staked tokens.
+    /// The total amount of staked tokens.
     total_staked: TokenAmountU64,
 
     /// The annual percentage rate.
@@ -196,25 +136,17 @@ struct State<S = StateApi> {
     /// Mapping of staker addresses to their stake info.
     stakes: StateMap<AccountAddress, StakeInfo, S>,
 
-    /// Address of liquid Euroe token contract
+    /// Address of liquid euroe token contract
     liquid_euroe: ContractAddress,
 
-    /// Address of the CIS-2 EuroE token contract.
+    /// Address of the euroe token contract.
     token_address: ContractAddress,
 
-    /// The token Id
-    token_id: TokenIdU8,
-
-    /// A registry to link an account to its next nonce. The nonce is used to
-    /// prevent replay attacks of the signed message. The nonce is increased
-    /// sequentially every time a signed message (corresponding to the
-    /// account) is successfully executed in the `permit` function. This
-    /// mapping keeps track of the next nonce that needs to be used by the
-    /// account to generate a signature.
-    nonces_registry: StateMap<AccountAddress, u64, S>,
+    /// The total number of participants
+    total_participants: u64,
 }
 
-/// Impl state
+/// Implementation of state
 impl State {
     pub fn get_user_stake(&self, user: &AccountAddress) -> (TokenAmountU64, u64) {
         self.stakes.get(user).map_or_else(
@@ -243,71 +175,48 @@ pub enum Error {
     /// Already Staked
     AlreadyStaked, // -5,
 
-    /// CIS Transfer Failed
-    Cis2TransferFailed, // -6
-
     /// OnlyAccount
-    OnlyAccount, // -7
+    OnlyAccount, // -6
 
     /// Only Admin Access
-    OnlyAdmin, // -8
+    OnlyAdmin, // -7
 
     /// Raised when the invocation of the cis2 token contract fails.
-    InvokeContractError, //-9
+    InvokeContractError, //-8
 
     /// Raised when the parsing of the result from the cis2 token contract
     /// fails.
-    ParseResult, //-10
+    ParseResult, //-9
 
     /// Raised when the response of the cis2 token contract is invalid.
-    InvalidResponse, //-11
+    InvalidResponse, //-10
 
     /// Failed logging: Log is full.
-    LogFull, // -12
+    LogFull, // -11
 
     /// Failed logging: Log is malformed.
-    LogMalformed, // -13
+    LogMalformed, // -12
 
     /// Upgrade failed because the new module does not exist.
-    FailedUpgradeMissingModule, // -14
+    FailedUpgradeMissingModule, // -13
 
     /// Upgrade failed because the new module does not contain a contract with a
     /// matching name.
-    FailedUpgradeMissingContract, // -15
+    FailedUpgradeMissingContract, // -14
 
     /// Upgrade failed because the smart contract version of the module is not
     /// supported.
-    FailedUpgradeUnsupportedModuleVersion, // -16
+    FailedUpgradeUnsupportedModuleVersion, // -15
 
     // Contract is paused.
-    ContractPaused, // -17
-
-    /// Failed to verify signature because signer account does not exist on
-    /// chain.
-    MissingAccount, // -18
-
-    /// Failed to verify signature because data was malformed.
-    MalformedData, // -19
-
-    /// Failed signature verification: Invalid signature.
-    WrongSignature, // -20
-
-    /// Failed signature verification: A different nonce is expected.
-    NonceMismatch, // -21
-
-    /// Failed signature verification: Signature was intended for a different
-    /// contract.
-    WrongContract, // -22
-
-    /// Failed signature verification: Signature was intended for a different
-    /// entry_point.
-    WrongEntryPoint, // -23
-
-    /// Failed signature verification: Signature is expired.
-    Expired, // -24
+    ContractPaused, // -16
 
     /// Insufficient funds
-    InsufficientFunds,
+    InsufficientFunds, // -17
+
+    /// Raised when someone else than the cis2 token contract invokes the `stake`
+    /// entry point.
+    NotTokenContract, //-18
 }
 
 /// Mapping the logging errors to Error.
@@ -350,18 +259,8 @@ impl<T> From<CallContractError<T>> for Error {
     }
 }
 
-/// Mapping account signature error to Error
-impl From<CheckAccountSignatureError> for Error {
-    fn from(e: CheckAccountSignatureError) -> Self {
-        match e {
-            CheckAccountSignatureError::MissingAccount => Self::MissingAccount,
-            CheckAccountSignatureError::MalformedData => Self::MalformedData,
-        }
-    }
-}
-
 /// Enum for different event types in the contract.
-#[derive(Debug, Serial, Deserial, PartialEq, Eq)]
+#[derive(Debug, Serial, Deserial, PartialEq, Eq, SchemaType)]
 #[concordium(repr(u8))]
 pub enum Event {
     /// Event for when tokens are staked.
@@ -375,11 +274,6 @@ pub enum Event {
 
     /// Event for when APR is updated.
     AprUpdated(UpdateAprEvent),
-
-    /// The event tracks the nonce used by the signer of the `PermitMessage`
-    /// whenever the `permit` function is invoked.
-    #[concordium(tag = 250)]
-    Nonce(NonceEvent),
 }
 
 /// Event structure for staking.
@@ -434,19 +328,9 @@ pub struct UpdateAprEvent {
     update_timestamp: u64,
 }
 
-/// The NonceEvent is logged when the `permit` function is invoked. The event
-/// tracks the nonce used by the signer of the `PermitMessage`.
-#[derive(Debug, Serialize, SchemaType, PartialEq, Eq)]
-pub struct NonceEvent {
-    /// Account that signed the `PermitMessage`.
-    pub account: AccountAddress,
-    /// The nonce that was used in the `PermitMessage`.
-    pub nonce: u64,
-}
-
 /// Contract token ID type. It has to be the `ContractTokenId` from the cis2
 /// token contract.
-pub type ContractTokenId = TokenIdU8;
+pub type ContractTokenId = TokenIdUnit;
 
 /// ContractResult type.
 pub type ContractResult<A> = Result<A, Error>;
@@ -454,104 +338,27 @@ pub type ContractResult<A> = Result<A, Error>;
 /// Initialization function for the contract.
 #[init(contract = "concordium_staking", parameter = "InitContractParams")]
 fn contract_init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State> {
-    // Get token address from parameters.
-    let params: InitContractParams = ctx.parameter_cursor().get()?;
-
+    let params: InitContractParams = ctx.parameter_cursor().get()?; // Get token address from parameters.
     let state = State {
         paused: false,
         admin: params.admin,
         total_staked: TokenAmountU64(0), // Initialize total staked to 0.
+        total_participants: 0,
         apr: INITIAL_APR, // Set initial APR to 12%.
         stakes: state_builder.new_map(), // Initialize empty stakes map.
         liquid_euroe: params.liquid_euroe,
         token_address: params.token_address, // Set the token address.
-        token_id: params.token_id,
-        nonces_registry: state_builder.new_map(),
     };
 
     Ok(state) // Return success.
 }
 
-/// Verify an ed25519 signature and allow user to stake, unstake & claim rewards
-/// Euroe stablecoin
-/// In case of a `stake` action:
-/// Logs a `StakeEvent` event
-///
-/// In case of a `unstake` action:
-/// Logs an `UnstakeEvent` event.
-///
-/// It rejects if:
-/// - It fails to parse the parameter.
-/// - The contract is paused.
-/// - The sender is blocked.
-/// - A different nonce is expected.
-/// - The signature was intended for a different contract.
-/// - The signature was intended for a different `entry_point`.
-/// - The signature is expired.
-/// - The signature can not be validated.
-/// - Fails to log event.
-#[receive(
-    contract = "concordium_staking",
-    name = "permit",
-    parameter = "PermitParam",
-    crypto_primitives,
-    mutable,
-    enable_logger
-)]
-fn contract_permit(
-    ctx: &ReceiveContext,
-    host: &mut Host<State>,
-    logger: &mut impl HasLogger,
-    crypto_primitives: &impl HasCryptoPrimitives
+/// Receive cis-2 token
+#[receive(contract = "concordium_staking", name = "onReceivingCIS2", error = "Error")]
+fn contract_on_cis2_received<S: HasStateApi>(
+    _ctx: &impl HasReceiveContext,
+    _host: &impl HasHost<State, StateApiType = S>
 ) -> ContractResult<()> {
-    // Check if the contract is paused.
-    ensure!(!host.state().paused, Error::ContractPaused);
-
-    // Parse the parameter.
-    let param: PermitParam = ctx.parameter_cursor().get()?;
-
-    let mut entry = host
-        .state_mut()
-        .nonces_registry.entry(param.signer)
-        .or_insert_with(|| 0);
-
-    // Get the current nonce.
-    let nonce = *entry;
-
-    // Bump nonce.
-    *entry += 1;
-    drop(entry);
-
-    let message = param.message;
-
-    // Check the nonce to prevent replay attacks.
-    ensure_eq!(message.nonce, nonce, Error::NonceMismatch);
-
-    // Check that the signature was intended for this contract.
-    ensure_eq!(message.contract_address, ctx.self_address(), Error::WrongContract);
-
-    // Check signature is not expired.
-    ensure!(message.timestamp > ctx.metadata().slot_time(), Error::Expired);
-
-    let message_hash = contract_view_message_hash(ctx, host, crypto_primitives)?;
-
-    // Check signature.
-    let valid_signature = host.check_account_signature(
-        param.signer,
-        &param.signature,
-        &message_hash
-    )?;
-
-    ensure!(valid_signature, Error::WrongSignature);
-
-    // Log the nonce event.
-    logger.log(
-        &Event::Nonce(NonceEvent {
-            account: param.signer,
-            nonce,
-        })
-    )?;
-
     Ok(())
 }
 
@@ -559,7 +366,8 @@ fn contract_permit(
 #[receive(
     contract = "concordium_staking",
     name = "stake",
-    parameter = "StakeParams",
+    parameter = "OnReceivingCis2DataParams<ContractTokenId, TokenAmountU64,AdditionalData>",
+    error = "Error",
     mutable,
     enable_logger
 )]
@@ -568,116 +376,95 @@ fn contract_stake(
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    // Get request parameters.
-    let params: StakeParams = ctx.parameter_cursor().get()?;
+    let state = host.state_mut(); // Get the contract state.
+    if !ctx.sender().matches_contract(&state.token_address) {
+        bail!(Error::NotTokenContract);
+    } // Ensure the sender is the cis2 token contract.
 
-    // Ensure that only accounts can stake.
-    let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!(Error::OnlyAccount.into()),
+    let params: OnReceivingCis2DataParams<ContractTokenId, TokenAmountU64, AdditionalData> = ctx
+        .parameter_cursor()
+        .get()?; // Get request parameters.
+
+    let sender_address = match params.from {
+        Address::Contract(_) => bail!(Error::OnlyAccount),
         Address::Account(account_address) => account_address,
-    };
+    }; // Ensure that only accounts can stake.
 
-    // Get the current timestamp.
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000;
-
-    // Get the contract state.
-    let state = host.state_mut();
-
-    // Get the amount to stake.
-    let amount = params.amount;
+    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
+    let amount = params.amount; // Get the amount to stake.
 
     ensure!(!state.paused, Error::ContractPaused);
-    ensure!(amount > 0, Error::InvalidStakeAmount);
+    ensure!(amount.gt(&TokenAmountU64(0)), Error::InvalidStakeAmount);
 
-    // Update the total staked amount.
-    state.total_staked += TokenAmountU64(amount.into());
+    state.total_staked += amount; // Update the total staked amount.
+    state.total_participants += 1;
 
-    // Update the sender's stake.
     let mut sender_stake = state.stakes
         .entry(sender_address)
-        .or_insert_with(|| StakeInfo { amount: TokenAmountU64(0), timestamp: unix_timestamp });
+        .or_insert_with(|| StakeInfo { amount: TokenAmountU64(0), timestamp: unix_timestamp }); // Update the sender's stake.
 
     ensure_eq!(sender_stake.amount, TokenAmountU64(0), Error::AlreadyStaked);
 
-    sender_stake.amount = TokenAmountU64(amount.into());
+    sender_stake.amount = amount;
     sender_stake.timestamp = unix_timestamp;
     drop(sender_stake);
 
-    // Transfer EuroE tokens to the staking contract.
-    cis2_transfer(
-        host,
-        Address::Account(sender_address),
-        Receiver::Contract(
-            ctx.self_address(),
-            OwnedEntrypointName::new_unchecked("transfer".to_string())
-        ),
-        TokenAmountU64(amount.into()),
-        false
-    )?;
+    mint(host, Address::Account(sender_address), amount)?; // Mint same amount of liquid EuroE tokens
 
-    // Mint liquid EuroE tokens
-    mint(host, Address::Account(sender_address), TokenAmountU64(amount.into()))?;
-
-    // Log stake event.
     logger.log(
         &Event::Staked(StakeEvent {
             user: sender_address,
-            stake_amount: amount.into(),
+            stake_amount: amount,
             staked_timestamp: unix_timestamp,
         })
-    )?;
+    )?; // Log stake event.
 
     Ok(()) // Return success.
 }
 
 /// Function to unstake tokens.
-#[receive(contract = "concordium_staking", name = "unstake", mutable, enable_logger)]
+#[receive(
+    contract = "concordium_staking",
+    name = "unstake",
+    error = "Error",
+    mutable,
+    enable_logger
+)]
 fn contract_unstake(
     ctx: &ReceiveContext,
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    // Ensure that only accounts can unstake
     let sender_address = match ctx.sender() {
         Address::Contract(_) => bail!(Error::OnlyAccount.into()),
         Address::Account(account_address) => account_address,
-    };
+    }; // Ensure that only accounts can unstake
 
-    // Get the current timestamp.
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000;
-
-    // Get the contract state.
-    let state = host.state_mut();
+    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
+    let state = host.state_mut(); // Get the contract state.
     ensure!(!state.paused, Error::ContractPaused);
-
-    // Ensure the sender has enough staked tokens.
-    let sender_stake = state.stakes.entry(sender_address).occupied_or(Error::NoStakeFound)?;
+    let sender_stake = state.stakes.entry(sender_address).occupied_or(Error::NoStakeFound)?; // Ensure the sender has enough staked tokens.
     let unstake_amount = sender_stake.amount;
 
-    // Calculate rewards.
     let earned_rewards = TokenAmountU64(
         calculate_reward(unstake_amount.0, sender_stake.timestamp, unix_timestamp, state.apr).into()
-    );
+    ); // Calculate rewards.
 
     drop(sender_stake);
     state.stakes.remove(&sender_address);
+    state.total_staked -= unstake_amount; // Update the total staked amount.
+    state.total_participants -= 1;
 
-    // Update the total staked amount.
-    state.total_staked -= unstake_amount;
+    burn(host, Address::Account(sender_address), unstake_amount)?; // Burn liquid EuroE tokens.
 
-    // Burn liquid EuroE tokens.
-    burn(host, Address::Account(sender_address), unstake_amount)?;
-
-    // Transfer EuroE tokens back to the sender along with rewards.
-    cis2_transfer(
+    transfer_euroe_token(
         host,
         Address::Contract(ctx.self_address()),
         Receiver::Account(sender_address),
         unstake_amount + earned_rewards,
         true
-    )?;
+    )?; // Transfer EuroE tokens back to the sender along with rewards.
 
-    // Log unstake event.
     logger.log(
         &Event::Unstaked(UnstakeEvent {
             user: sender_address,
@@ -685,33 +472,34 @@ fn contract_unstake(
             unix_timestamp,
             rewards_earned: earned_rewards.into(),
         })
-    )?;
+    )?; // Log unstake event.
 
     Ok(()) // Return success.
 }
 
 /// Function to claim rewards.
-#[receive(contract = "concordium_staking", name = "claimRewards", mutable, enable_logger)]
+#[receive(
+    contract = "concordium_staking",
+    name = "claimRewards",
+    error = "Error",
+    mutable,
+    enable_logger
+)]
 fn contract_claim_rewards(
     ctx: &ReceiveContext,
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    // Ensure that only accounts can claim rewards
     let sender_address = match ctx.sender() {
         Address::Contract(_) => bail!(Error::OnlyAccount.into()),
         Address::Account(account_address) => account_address,
-    };
+    }; // Ensure that only accounts can claim rewards
 
-    // Get the current timestamp.
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000;
+    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
 
     let state = host.state_mut();
     ensure!(!state.paused, Error::ContractPaused);
-
     let mut sender_stake = state.stakes.entry(sender_address).occupied_or(Error::NoStakeFound)?;
-
-    // Calculate rewards.
     let earned_rewards = TokenAmountU64(
         calculate_reward(
             sender_stake.amount.0,
@@ -719,28 +507,26 @@ fn contract_claim_rewards(
             unix_timestamp,
             state.apr
         ).into()
-    );
+    ); // Calculate rewards.
 
     sender_stake.timestamp = unix_timestamp;
     drop(sender_stake);
 
-    // Transfer rewards to the sender
-    cis2_transfer(
+    transfer_euroe_token(
         host,
         Address::Contract(ctx.self_address()),
         Receiver::Account(sender_address),
         earned_rewards,
         true
-    )?;
+    )?; // Transfer rewards to the sender
 
-    // Log claim event.
     logger.log(
         &Event::Claimed(ClaimEvent {
             user: sender_address,
             rewards_claimed: earned_rewards,
             claim_timestamp: unix_timestamp,
         })
-    )?;
+    )?; // Log claim event.
 
     Ok(()) // Return success.
 }
@@ -751,25 +537,23 @@ fn contract_claim_rewards(
     contract = "concordium_staking",
     name = "withdrawEuroe",
     parameter = "WithdrawEuroEParams",
+    error = "Error",
     mutable
 )]
 fn contract_withdraw_euroe(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
     let params: WithdrawEuroEParams = ctx.parameter_cursor().get()?;
     let sender = ctx.sender();
+    ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized); // Access by contract owner only.
 
-    // Access by contract owner only.
-    ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized);
-
-    // cis-2 transfer
-    cis2_transfer(
+    transfer_euroe_token(
         host,
         Address::Contract(ctx.self_address()),
         Receiver::Account(params.withdraw_address),
         params.amount,
         true
-    )?;
+    )?; // cis-2 transfer
 
-    Ok(())
+    Ok(()) // Return success
 }
 
 /// Function to pause or unpause the concordium liquid staking contract
@@ -778,6 +562,7 @@ fn contract_withdraw_euroe(ctx: &ReceiveContext, host: &mut Host<State>) -> Cont
     contract = "concordium_staking",
     name = "setPaused",
     parameter = "SetPausedParams",
+    error = "Error",
     mutable
 )]
 fn contract_set_paused(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
@@ -787,7 +572,7 @@ fn contract_set_paused(ctx: &ReceiveContext, host: &mut Host<State>) -> Contract
 
     let state = host.state_mut();
     state.paused = params.paused;
-    Ok(())
+    Ok(()) // Return success
 }
 
 /// Function to update the APR.
@@ -796,6 +581,7 @@ fn contract_set_paused(ctx: &ReceiveContext, host: &mut Host<State>) -> Contract
     contract = "concordium_staking",
     name = "updateApr",
     parameter = "UpdateAprParams",
+    error = "Error",
     mutable,
     enable_logger
 )]
@@ -804,33 +590,22 @@ fn update_apr(
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    // Get request parameters.
-    let params: UpdateAprParams = ctx.parameter_cursor().get()?;
+    let params: UpdateAprParams = ctx.parameter_cursor().get()?; // Get request parameters.
+    let sender = ctx.sender(); // Get the sender's address.
 
-    // Get the sender's address.
-    let sender = ctx.sender();
+    let now = ctx.metadata().block_time(); // Get the current timestamp.
+    ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized); // Ensure only the contract owner can update the APR
+    let state = host.state_mut(); // Get the contract state.
 
-    // Get the current timestamp.
-    let now = ctx.metadata().block_time();
-
-    // Ensure only the contract owner can update the APR
-    ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized);
-
-    // Get the contract state.
-    let state = host.state_mut();
-
-    // Update the APR.
-    state.apr = params.new_apr;
-
-    // Log APR update event.
+    state.apr = params.new_apr; // Update the APR.
     logger.log(
         &Event::AprUpdated(UpdateAprEvent {
             new_apr: params.new_apr,
             update_timestamp: now.millis,
         })
-    )?;
+    )?; // Log APR update event.
 
-    Ok(())
+    Ok(()) // Return success
 }
 
 /// Upgrade this smart contract instance to a new module and call optionally a
@@ -856,19 +631,11 @@ fn update_apr(
     low_level
 )]
 fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractResult<()> {
-    // Read the top-level contract state.
-    let state: State = host.state().read_root()?;
+    let state: State = host.state().read_root()?; // Read the top-level contract state.
+    ensure!(ctx.sender().matches_account(&state.admin), Error::OnlyAdmin); // Check that only the admin is authorized to upgrade the smart contract.
+    let params: UpgradeParams = ctx.parameter_cursor().get()?; // Parse the parameter.
 
-    // Check that only the admin is authorized to upgrade the smart contract.
-    ensure!(ctx.sender().matches_account(&state.admin), Error::OnlyAdmin);
-
-    // Parse the parameter.
-    let params: UpgradeParams = ctx.parameter_cursor().get()?;
-
-    // Trigger the upgrade.
-    host.upgrade(params.module)?;
-
-    // Call the migration function if provided.
+    host.upgrade(params.module)?; // Trigger the upgrade.
     if let Some((func, parameters)) = params.migrate {
         host.invoke_contract_raw(
             &ctx.self_address(),
@@ -876,60 +643,9 @@ fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractRe
             func.as_entrypoint_name(),
             Amount::zero()
         )?;
-    }
-    Ok(())
-}
+    } // Call the migration function if provided.
 
-/// Helper function to calculate the `message_hash`.
-#[receive(
-    contract = "concordium_staking",
-    name = "viewMessageHash",
-    parameter = "PermitParam",
-    return_value = "[u8;32]",
-    error = "Error",
-    crypto_primitives,
-    mutable
-)]
-fn contract_view_message_hash(
-    ctx: &ReceiveContext,
-    _host: &mut Host<State>,
-    crypto_primitives: &impl HasCryptoPrimitives
-) -> ContractResult<[u8; 32]> {
-    // Parse the parameter.
-    let mut cursor = ctx.parameter_cursor();
-    // The input parameter is `PermitParam` but we only read the initial part of it
-    // with `PermitParamPartial`. I.e. we read the `signature` and the
-    // `signer`, but not the `message` here.
-    let param: PermitParamPartial = cursor.get()?;
-
-    // The input parameter is `PermitParam` but we have only read the initial part
-    // of it with `PermitParamPartial` so far. We read in the `message` now.
-    // `(cursor.size() - cursor.cursor_position()` is the length of the message in
-    // bytes.
-    let mut message_bytes = vec![0; (cursor.size() - cursor.cursor_position()) as usize];
-
-    cursor.read_exact(&mut message_bytes)?;
-
-    // The message signed in the Concordium browser wallet is prepended with the
-    // `account` address and 8 zero bytes. Accounts in the Concordium browser wallet
-    // can either sign a regular transaction (in that case the prepend is
-    // `account` address and the nonce of the account which is by design >= 1)
-    // or sign a message (in that case the prepend is `account` address and 8 zero
-    // bytes). Hence, the 8 zero bytes ensure that the user does not accidentally
-    // sign a transaction. The account nonce is of type u64 (8 bytes).
-    let mut msg_prepend = [0; 32 + 8];
-    // Prepend the `account` address of the signer.
-    msg_prepend[0..32].copy_from_slice(param.signer.as_ref());
-
-    // Prepend 8 zero bytes.
-    msg_prepend[32..40].copy_from_slice(&[0u8; 8]);
-
-    // Calculate the message hash.
-    let message_hash = crypto_primitives.hash_sha2_256(
-        &[&msg_prepend[0..40], &message_bytes].concat()
-    ).0;
-
-    Ok(message_hash)
+    Ok(()) // Return success
 }
 
 /// Function to retrieve contract state
@@ -943,8 +659,8 @@ fn contract_view(_ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<Vi
         apr: state.apr,
         liquid_euroe: state.liquid_euroe,
         token_address: state.token_address,
-        token_id: state.token_id,
-    })
+        total_participants: state.total_participants,
+    }) // Return success
 }
 
 /// Function to retrieve specific user stake
@@ -962,7 +678,7 @@ fn contract_get_stake_info(ctx: &ReceiveContext, host: &Host<State>) -> Contract
     Ok(StakeInfo {
         amount,
         timestamp,
-    })
+    }) // Return success
 }
 
 /// Function to get earned rewards.
@@ -975,42 +691,44 @@ fn contract_get_stake_info(ctx: &ReceiveContext, host: &Host<State>) -> Contract
 fn get_earned_rewards(ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<u64> {
     let user: AccountAddress = ctx.parameter_cursor().get()?;
     let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
-
     let state = host.state(); // Get the contract state.
-    let (amount, timestamp) = state.get_user_stake(&user);
 
-    // Calculate rewards.
-    let earned_rewards = calculate_reward(amount.0, timestamp, unix_timestamp, state.apr);
+    let (amount, timestamp) = state.get_user_stake(&user);
+    let earned_rewards = calculate_reward(amount.0, timestamp, unix_timestamp, state.apr); // Calculate rewards.
     Ok(earned_rewards) // Return the calculated rewards.
 }
 
 /// Function to calculate rewards.
 fn calculate_reward(amount: u64, start: u64, end: u64, apr: u64) -> u64 {
     let seconds_passed = end - start;
-    (amount * apr * seconds_passed) / APR_DENOMINATOR
+    (((amount * apr * seconds_passed) as u128) / APR_DENOMINATOR) as u64
 }
 
-/// Function to transfer CIS-2 tokens.
-fn cis2_transfer(
+/// Function to transfer euroe stablecoin.
+fn transfer_euroe_token(
     host: &mut Host<State>,
     from: Address,
     to: Receiver,
     amount: TokenAmountU64,
-    vbt: bool
+    before_transfer_check: bool
 ) -> ContractResult<()> {
     let state = host.state();
     let client = Cis2Client::new(state.token_address);
 
-    if vbt {
-        let contract_balance: TokenAmountU64 = client.balance_of(host, state.token_id, from)?;
+    if before_transfer_check {
+        let contract_balance = client.balance_of::<State, ContractTokenId, TokenAmountU64, Error>(
+            host,
+            TOKEN_ID_EUROE,
+            from
+        )?;
         ensure!(contract_balance.gt(&amount), Error::InsufficientFunds);
     }
 
-    client.transfer::<State, TokenIdU8, TokenAmountU64, Error>(host, Transfer {
+    client.transfer::<State, ContractTokenId, TokenAmountU64, Error>(host, Transfer {
         amount,
         from,
         to,
-        token_id: state.token_id,
+        token_id: TOKEN_ID_EUROE,
         data: AdditionalData::empty(),
     })?;
 
@@ -1019,16 +737,20 @@ fn cis2_transfer(
 
 /// Function to mint liquid euroe.
 fn mint(host: &mut Host<State>, to: Address, amount: TokenAmountU64) -> ContractResult<()> {
-    let le = host.state().liquid_euroe;
-    let parameter = to_bytes(
-        &(MintParams {
-            owner: to,
-            amount,
-        })
-    );
-    host.invoke_contract(&le, &parameter, EntrypointName::new_unchecked("mint"), Amount::zero())?;
+    let liquid_euroe = host.state().liquid_euroe;
+    let parameter = MintParams {
+        owner: to,
+        amount,
+    };
 
-    Ok(())
+    host.invoke_contract(
+        &liquid_euroe,
+        &parameter,
+        EntrypointName::new_unchecked("mint"),
+        Amount::zero()
+    )?;
+
+    Ok(()) // Return success
 }
 
 /// Function to burn liquid euroe.
@@ -1037,14 +759,17 @@ fn burn(
     burnaddress: Address,
     amount: TokenAmountU64
 ) -> ContractResult<()> {
-    let le = host.state().liquid_euroe;
-    let parameter = to_bytes(
-        &(BurnParams {
-            amount,
-            burnaddress,
-        })
-    );
-    host.invoke_contract(&le, &parameter, EntrypointName::new_unchecked("burn"), Amount::zero())?;
+    let liquid_euroe = host.state().liquid_euroe;
+    let parameter = BurnParams {
+        amount,
+        burnaddress,
+    };
+    host.invoke_contract(
+        &liquid_euroe,
+        &parameter,
+        EntrypointName::new_unchecked("burn"),
+        Amount::zero()
+    )?;
 
-    Ok(())
+    Ok(()) // Return success
 }

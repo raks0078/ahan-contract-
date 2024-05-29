@@ -3,5 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "author": "Bhupendra Bisht <bhupendrabisht61049@gmail.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "generate": "ccd-js-gen --out-dir ./generated -m ./liquid-staking/dist/concordium-staking.wasm.v1 -t TypeScript -n"
+  },
+  "dependencies": {
+    "@concordium/ccd-js-gen": "^1.2.0"
+  }
 }
