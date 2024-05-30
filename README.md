@@ -81,7 +81,8 @@ This document provides a step-by-step guide for deploying and configuring the Co
    
 2. **Initialize Contract:**
    - Use the `Initialize Smart Contract` button and provide the necessary parameters including admin account address, Liquid EUROe contract index, and EUROe stablecoin contract index.
-   - Example Parameter ```json
+   - Example Parameter 
+   ```json
    {
   "admin": <ADMIN_ACCOUNT_ADDRESS>,
   "liquid_euroe": {
@@ -92,8 +93,7 @@ This document provides a step-by-step guide for deploying and configuring the Co
     "index": <EUROE_STABLECOIN_CONTRACT_INDEX>,
     "subindex": 0
   }
- }
-   ```
+ }```
 3. **Grant Roles to Staking Contract:**
    - Grant 'mintrole' and 'burnrole' to the Staking Contract address on the Liquid EUROe token contract instance.
    - Example Parameter ```json
