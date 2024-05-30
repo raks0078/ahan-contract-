@@ -28,10 +28,10 @@ pub struct InitContractParams {
     /// The admin role of concordium liquid staking smart contract.
     pub admin: AccountAddress,
 
-    /// Address of liquid Euroe token contract.
+    /// Address of liquid EUROe token contract.
     pub liquid_euroe: ContractAddress,
 
-    /// Address of the CIS-2 EuroE token contract.
+    /// Address of the CIS-2 EUROe token contract.
     pub token_address: ContractAddress,
 }
 
@@ -75,7 +75,7 @@ pub struct MintParams {
 /// which burns an amount of liquid EUROe to a given address.
 #[derive(Serialize, SchemaType)]
 pub struct BurnParams {
-    /// The amount to burn liquid EuroE.
+    /// The amount to burn liquid EUROe.
     pub amount: TokenAmountU64,
 
     /// The address of user.
@@ -97,10 +97,10 @@ pub struct ViewResult {
     /// The Apr.
     apr: u64,
 
-    /// Address of liquid euroe token contract
+    /// Address of liquid EUROe token contract
     liquid_euroe: ContractAddress,
 
-    /// Address of the euroe token contract.
+    /// Address of the EUROe token contract.
     token_address: ContractAddress,
 
     /// The total number of participants
@@ -136,10 +136,10 @@ struct State<S = StateApi> {
     /// Mapping of staker addresses to their stake info.
     stakes: StateMap<AccountAddress, StakeInfo, S>,
 
-    /// Address of liquid euroe token contract
+    /// Address of liquid EUROe token contract
     liquid_euroe: ContractAddress,
 
-    /// Address of the euroe token contract.
+    /// Address of the EUROe token contract.
     token_address: ContractAddress,
 
     /// The total number of participants
@@ -148,7 +148,10 @@ struct State<S = StateApi> {
 
 /// Implementation of state
 impl State {
-    pub fn get_user_stake(&self, user: &AccountAddress) -> (TokenAmountU64, u64) {
+    pub fn get_user_stake(
+        &self,
+        user: &AccountAddress
+    ) -> (TokenAmountU64, u64) {
         self.stakes.get(user).map_or_else(
             || (TokenAmountU64(0), 0),
             |s| (s.amount, s.timestamp)
@@ -172,51 +175,48 @@ pub enum Error {
     /// No Stake Found
     NoStakeFound, // -4
 
-    /// Already Staked
-    AlreadyStaked, // -5,
-
     /// OnlyAccount
-    OnlyAccount, // -6
+    OnlyAccount, // -5
 
     /// Only Admin Access
-    OnlyAdmin, // -7
+    OnlyAdmin, // -6
 
     /// Raised when the invocation of the cis2 token contract fails.
-    InvokeContractError, //-8
+    InvokeContractError, //-7
 
     /// Raised when the parsing of the result from the cis2 token contract
     /// fails.
-    ParseResult, //-9
+    ParseResult, //-8
 
     /// Raised when the response of the cis2 token contract is invalid.
-    InvalidResponse, //-10
+    InvalidResponse, //-9
 
     /// Failed logging: Log is full.
-    LogFull, // -11
+    LogFull, // -10
 
     /// Failed logging: Log is malformed.
-    LogMalformed, // -12
+    LogMalformed, // -11
 
     /// Upgrade failed because the new module does not exist.
-    FailedUpgradeMissingModule, // -13
+    FailedUpgradeMissingModule, // -12
 
     /// Upgrade failed because the new module does not contain a contract with a
     /// matching name.
-    FailedUpgradeMissingContract, // -14
+    FailedUpgradeMissingContract, // -13
 
     /// Upgrade failed because the smart contract version of the module is not
     /// supported.
-    FailedUpgradeUnsupportedModuleVersion, // -15
+    FailedUpgradeUnsupportedModuleVersion, // -14
 
     // Contract is paused.
-    ContractPaused, // -16
+    ContractPaused, // -15
 
     /// Insufficient funds
-    InsufficientFunds, // -17
+    InsufficientFunds, // -16
 
     /// Raised when someone else than the cis2 token contract invokes the `stake`
     /// entry point.
-    NotTokenContract, //-18
+    NotTokenContract, //-17
 }
 
 /// Mapping the logging errors to Error.
@@ -233,7 +233,8 @@ impl From<LogError> for Error {
 impl From<Cis2ClientError<Error>> for Error {
     fn from(e: Cis2ClientError<Error>) -> Self {
         match e {
-            Cis2ClientError::InvokeContractError(_) => Self::InvokeContractError,
+            Cis2ClientError::InvokeContractError(_) =>
+                Self::InvokeContractError,
             Cis2ClientError::ParseResult => Self::ParseResult,
             Cis2ClientError::InvalidResponse => Self::InvalidResponse,
         }
@@ -247,7 +248,8 @@ impl From<UpgradeError> for Error {
         match ue {
             UpgradeError::MissingModule => Self::FailedUpgradeMissingModule,
             UpgradeError::MissingContract => Self::FailedUpgradeMissingContract,
-            UpgradeError::UnsupportedModuleVersion => Self::FailedUpgradeUnsupportedModuleVersion,
+            UpgradeError::UnsupportedModuleVersion =>
+                Self::FailedUpgradeUnsupportedModuleVersion,
         }
     }
 }
@@ -337,7 +339,10 @@ pub type ContractResult<A> = Result<A, Error>;
 
 /// Initialization function for the contract.
 #[init(contract = "concordium_staking", parameter = "InitContractParams")]
-fn contract_init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitResult<State> {
+fn contract_init(
+    ctx: &InitContext,
+    state_builder: &mut StateBuilder
+) -> InitResult<State> {
     let params: InitContractParams = ctx.parameter_cursor().get()?; // Get token address from parameters.
     let state = State {
         paused: false,
@@ -354,7 +359,11 @@ fn contract_init(ctx: &InitContext, state_builder: &mut StateBuilder) -> InitRes
 }
 
 /// Receive cis-2 token
-#[receive(contract = "concordium_staking", name = "onReceivingCIS2", error = "Error")]
+#[receive(
+    contract = "concordium_staking",
+    name = "onReceivingCIS2",
+    error = "Error"
+)]
 fn contract_on_cis2_received<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     _host: &impl HasHost<State, StateApiType = S>
@@ -381,35 +390,60 @@ fn contract_stake(
         bail!(Error::NotTokenContract);
     } // Ensure the sender is the cis2 token contract.
 
-    let params: OnReceivingCis2DataParams<ContractTokenId, TokenAmountU64, AdditionalData> = ctx
-        .parameter_cursor()
-        .get()?; // Get request parameters.
+    let params: OnReceivingCis2DataParams<
+        ContractTokenId,
+        TokenAmountU64,
+        AdditionalData
+    > = ctx.parameter_cursor().get()?; // Get request parameters.
 
-    let sender_address = match params.from {
-        Address::Contract(_) => bail!(Error::OnlyAccount),
-        Address::Account(account_address) => account_address,
-    }; // Ensure that only accounts can stake.
-
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
+    let sender_address = only_account(&params.from)?; // Ensure that only accounts can stake.
+    let unix_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
     let amount = params.amount; // Get the amount to stake.
 
     ensure!(!state.paused, Error::ContractPaused);
     ensure!(amount.gt(&TokenAmountU64(0)), Error::InvalidStakeAmount);
 
-    state.total_staked += amount; // Update the total staked amount.
-    state.total_participants += 1;
-
     let mut sender_stake = state.stakes
         .entry(sender_address)
-        .or_insert_with(|| StakeInfo { amount: TokenAmountU64(0), timestamp: unix_timestamp }); // Update the sender's stake.
+        .or_insert_with(|| StakeInfo {
+            amount: TokenAmountU64(0),
+            timestamp: unix_timestamp,
+        }); // Update the sender's stake.
 
-    ensure_eq!(sender_stake.amount, TokenAmountU64(0), Error::AlreadyStaked);
+    state.total_staked += amount; // Update the total staked amount.
+    if sender_stake.amount.eq(&TokenAmountU64(0)) {
+        state.total_participants += 1;
+    }
 
-    sender_stake.amount = amount;
+    let user_stake_info = sender_stake.clone();
+    sender_stake.amount += amount;
     sender_stake.timestamp = unix_timestamp;
+
+    let apr = state.apr;
     drop(sender_stake);
 
-    mint(host, Address::Account(sender_address), amount)?; // Mint same amount of liquid EuroE tokens
+    mint(host, Address::Account(sender_address), amount)?; // Mint same amount of liquid EUROe tokens
+
+    // If previously staked
+    if user_stake_info.amount.gt(&TokenAmountU64(0)) {
+        let earned_rewards = TokenAmountU64(
+            calculate_reward(
+                user_stake_info.amount.0,
+                user_stake_info.timestamp,
+                unix_timestamp,
+                apr
+            ).into()
+        );
+
+        // transfer EUROe tokens
+        transfer_euroe_token(
+            host,
+            Address::Contract(ctx.self_address()),
+            Receiver::Account(sender_address),
+            earned_rewards,
+            true
+        )?;
+    }
 
     logger.log(
         &Event::Staked(StakeEvent {
@@ -435,19 +469,24 @@ fn contract_unstake(
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!(Error::OnlyAccount.into()),
-        Address::Account(account_address) => account_address,
-    }; // Ensure that only accounts can unstake
+    let sender_address = only_account(&ctx.sender())?; // Ensure that only accounts can unstake
+    let unix_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
 
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
     let state = host.state_mut(); // Get the contract state.
     ensure!(!state.paused, Error::ContractPaused);
-    let sender_stake = state.stakes.entry(sender_address).occupied_or(Error::NoStakeFound)?; // Ensure the sender has enough staked tokens.
+
+    let sender_stake = state.stakes
+        .entry(sender_address)
+        .occupied_or(Error::NoStakeFound)?; // Ensure the sender has enough staked tokens.
     let unstake_amount = sender_stake.amount;
 
     let earned_rewards = TokenAmountU64(
-        calculate_reward(unstake_amount.0, sender_stake.timestamp, unix_timestamp, state.apr).into()
+        calculate_reward(
+            unstake_amount.0,
+            sender_stake.timestamp,
+            unix_timestamp,
+            state.apr
+        ).into()
     ); // Calculate rewards.
 
     drop(sender_stake);
@@ -455,7 +494,7 @@ fn contract_unstake(
     state.total_staked -= unstake_amount; // Update the total staked amount.
     state.total_participants -= 1;
 
-    burn(host, Address::Account(sender_address), unstake_amount)?; // Burn liquid EuroE tokens.
+    burn(host, Address::Account(sender_address), unstake_amount)?; // Burn liquid EUROe tokens.
 
     transfer_euroe_token(
         host,
@@ -463,7 +502,7 @@ fn contract_unstake(
         Receiver::Account(sender_address),
         unstake_amount + earned_rewards,
         true
-    )?; // Transfer EuroE tokens back to the sender along with rewards.
+    )?; // Transfer EUROe tokens back to the sender along with rewards.
 
     logger.log(
         &Event::Unstaked(UnstakeEvent {
@@ -490,16 +529,16 @@ fn contract_claim_rewards(
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
-    let sender_address = match ctx.sender() {
-        Address::Contract(_) => bail!(Error::OnlyAccount.into()),
-        Address::Account(account_address) => account_address,
-    }; // Ensure that only accounts can claim rewards
-
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
+    let sender_address = only_account(&ctx.sender())?; // Ensure that only accounts can claim rewards
+    let unix_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
 
     let state = host.state_mut();
     ensure!(!state.paused, Error::ContractPaused);
-    let mut sender_stake = state.stakes.entry(sender_address).occupied_or(Error::NoStakeFound)?;
+
+    let mut sender_stake = state.stakes
+        .entry(sender_address)
+        .occupied_or(Error::NoStakeFound)?;
+
     let earned_rewards = TokenAmountU64(
         calculate_reward(
             sender_stake.amount.0,
@@ -518,7 +557,7 @@ fn contract_claim_rewards(
         Receiver::Account(sender_address),
         earned_rewards,
         true
-    )?; // Transfer rewards to the sender
+    )?; // Transfer EUROe rewards to the sender
 
     logger.log(
         &Event::Claimed(ClaimEvent {
@@ -531,7 +570,7 @@ fn contract_claim_rewards(
     Ok(()) // Return success.
 }
 
-/// Function to withdraw euroe stablecoin
+/// Function to withdraw EUROe stablecoin
 /// Access by contract owner only.
 #[receive(
     contract = "concordium_staking",
@@ -540,7 +579,10 @@ fn contract_claim_rewards(
     error = "Error",
     mutable
 )]
-fn contract_withdraw_euroe(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
+fn contract_withdraw_euroe(
+    ctx: &ReceiveContext,
+    host: &mut Host<State>
+) -> ContractResult<()> {
     let params: WithdrawEuroEParams = ctx.parameter_cursor().get()?;
     let sender = ctx.sender();
     ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized); // Access by contract owner only.
@@ -551,7 +593,7 @@ fn contract_withdraw_euroe(ctx: &ReceiveContext, host: &mut Host<State>) -> Cont
         Receiver::Account(params.withdraw_address),
         params.amount,
         true
-    )?; // cis-2 transfer
+    )?; // transfer EUROe token
 
     Ok(()) // Return success
 }
@@ -565,7 +607,10 @@ fn contract_withdraw_euroe(ctx: &ReceiveContext, host: &mut Host<State>) -> Cont
     error = "Error",
     mutable
 )]
-fn contract_set_paused(ctx: &ReceiveContext, host: &mut Host<State>) -> ContractResult<()> {
+fn contract_set_paused(
+    ctx: &ReceiveContext,
+    host: &mut Host<State>
+) -> ContractResult<()> {
     let params: SetPausedParams = ctx.parameter_cursor().get()?;
     let sender = ctx.sender();
     ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized);
@@ -593,7 +638,7 @@ fn update_apr(
     let params: UpdateAprParams = ctx.parameter_cursor().get()?; // Get request parameters.
     let sender = ctx.sender(); // Get the sender's address.
 
-    let now = ctx.metadata().block_time(); // Get the current timestamp.
+    let update_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
     ensure!(sender.matches_account(&ctx.owner()), Error::UnAuthorized); // Ensure only the contract owner can update the APR
     let state = host.state_mut(); // Get the contract state.
 
@@ -601,7 +646,7 @@ fn update_apr(
     logger.log(
         &Event::AprUpdated(UpdateAprEvent {
             new_apr: params.new_apr,
-            update_timestamp: now.millis,
+            update_timestamp,
         })
     )?; // Log APR update event.
 
@@ -630,7 +675,10 @@ fn update_apr(
     error = "Error",
     low_level
 )]
-fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractResult<()> {
+fn contract_upgrade(
+    ctx: &ReceiveContext,
+    host: &mut LowLevelHost
+) -> ContractResult<()> {
     let state: State = host.state().read_root()?; // Read the top-level contract state.
     ensure!(ctx.sender().matches_account(&state.admin), Error::OnlyAdmin); // Check that only the admin is authorized to upgrade the smart contract.
     let params: UpgradeParams = ctx.parameter_cursor().get()?; // Parse the parameter.
@@ -649,8 +697,15 @@ fn contract_upgrade(ctx: &ReceiveContext, host: &mut LowLevelHost) -> ContractRe
 }
 
 /// Function to retrieve contract state
-#[receive(contract = "concordium_staking", name = "view", return_value = "ViewResult")]
-fn contract_view(_ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<ViewResult> {
+#[receive(
+    contract = "concordium_staking",
+    name = "view",
+    return_value = "ViewResult"
+)]
+fn contract_view(
+    _ctx: &ReceiveContext,
+    host: &Host<State>
+) -> ContractResult<ViewResult> {
     let state = host.state();
     Ok(ViewResult {
         paused: state.paused,
@@ -670,7 +725,10 @@ fn contract_view(_ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<Vi
     parameter = "AccountAddress",
     return_value = "StakeInfo"
 )]
-fn contract_get_stake_info(ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<StakeInfo> {
+fn contract_get_stake_info(
+    ctx: &ReceiveContext,
+    host: &Host<State>
+) -> ContractResult<StakeInfo> {
     let user: AccountAddress = ctx.parameter_cursor().get()?;
     let state = host.state();
     let (amount, timestamp) = state.get_user_stake(&user);
@@ -688,14 +746,36 @@ fn contract_get_stake_info(ctx: &ReceiveContext, host: &Host<State>) -> Contract
     parameter = "AccountAddress",
     return_value = "u64"
 )]
-fn get_earned_rewards(ctx: &ReceiveContext, host: &Host<State>) -> ContractResult<u64> {
+fn get_earned_rewards(
+    ctx: &ReceiveContext,
+    host: &Host<State>
+) -> ContractResult<u64> {
     let user: AccountAddress = ctx.parameter_cursor().get()?;
-    let unix_timestamp = ctx.metadata().block_time().millis / 1000; // Get the current timestamp.
+    let unix_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
     let state = host.state(); // Get the contract state.
 
     let (amount, timestamp) = state.get_user_stake(&user);
-    let earned_rewards = calculate_reward(amount.0, timestamp, unix_timestamp, state.apr); // Calculate rewards.
+    let earned_rewards = calculate_reward(
+        amount.0,
+        timestamp,
+        unix_timestamp,
+        state.apr
+    ); // Calculate rewards.
+
     Ok(earned_rewards) // Return the calculated rewards.
+}
+
+/// Validation function to check only account
+fn only_account(sender: &Address) -> ContractResult<AccountAddress> {
+    match sender {
+        Address::Contract(_) => bail!(Error::OnlyAccount),
+        Address::Account(account_address) => Ok(*account_address),
+    }
+}
+
+/// Function to derive current block timestamp
+fn get_current_timestamp(ctx: &ReceiveContext) -> u64 {
+    ctx.metadata().block_time().millis / 1000
 }
 
 /// Function to calculate rewards.
@@ -704,7 +784,7 @@ fn calculate_reward(amount: u64, start: u64, end: u64, apr: u64) -> u64 {
     (((amount * apr * seconds_passed) as u128) / APR_DENOMINATOR) as u64
 }
 
-/// Function to transfer euroe stablecoin.
+/// Function to transfer EUROe stablecoin.
 fn transfer_euroe_token(
     host: &mut Host<State>,
     from: Address,
@@ -716,27 +796,35 @@ fn transfer_euroe_token(
     let client = Cis2Client::new(state.token_address);
 
     if before_transfer_check {
-        let contract_balance = client.balance_of::<State, ContractTokenId, TokenAmountU64, Error>(
-            host,
-            TOKEN_ID_EUROE,
-            from
-        )?;
+        let contract_balance = client.balance_of::<
+            State,
+            ContractTokenId,
+            TokenAmountU64,
+            Error
+        >(host, TOKEN_ID_EUROE, from)?;
         ensure!(contract_balance.gt(&amount), Error::InsufficientFunds);
     }
 
-    client.transfer::<State, ContractTokenId, TokenAmountU64, Error>(host, Transfer {
-        amount,
-        from,
-        to,
-        token_id: TOKEN_ID_EUROE,
-        data: AdditionalData::empty(),
-    })?;
+    client.transfer::<State, ContractTokenId, TokenAmountU64, Error>(
+        host,
+        Transfer {
+            amount,
+            from,
+            to,
+            token_id: TOKEN_ID_EUROE,
+            data: AdditionalData::empty(),
+        }
+    )?;
 
     Ok(())
 }
 
-/// Function to mint liquid euroe.
-fn mint(host: &mut Host<State>, to: Address, amount: TokenAmountU64) -> ContractResult<()> {
+/// Function to mint liquid EUROe.
+fn mint(
+    host: &mut Host<State>,
+    to: Address,
+    amount: TokenAmountU64
+) -> ContractResult<()> {
     let liquid_euroe = host.state().liquid_euroe;
     let parameter = MintParams {
         owner: to,
@@ -753,7 +841,7 @@ fn mint(host: &mut Host<State>, to: Address, amount: TokenAmountU64) -> Contract
     Ok(()) // Return success
 }
 
-/// Function to burn liquid euroe.
+/// Function to burn liquid EUROe.
 fn burn(
     host: &mut Host<State>,
     burnaddress: Address,
