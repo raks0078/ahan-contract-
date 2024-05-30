@@ -81,11 +81,57 @@ This document provides a step-by-step guide for deploying and configuring the Co
    
 2. **Initialize Contract:**
    - Use the `Initialize Smart Contract` button and provide the necessary parameters including admin account address, Liquid EUROe contract index, and EUROe stablecoin contract index.
-
+   ```json
+   {
+  "admin": <ADMIN_ACCOUNT_ADDRESS>,
+  "liquid_euroe": {
+    "index": <LIQUID_EUROE_CONTRAT_INDEX>,
+    "subindex": 0
+  },
+  "token_address": {
+    "index": <EUROE_STABLECOIN_CONTRACT_INDEX>,
+    "subindex": 0
+  }
+ }
+   ```
 3. **Grant Roles to Staking Contract:**
    - Grant 'mintrole' and 'burnrole' to the Staking Contract address on the Liquid EUROe token contract instance.
-
-### Module and UI
+   ```json
+   {
+  "adminrole": {    
+    "Account": [
+      "3ipmAeMSPvfZdxyoNq8UqETXWxwFCVUwdTXggeNAKdTpo62Sjf"
+    ]
+  },
+  "blockrole": {
+    "Account": [
+      "3ipmAeMSPvfZdxyoNq8UqETXWxwFCVUwdTXggeNAKdTpo62Sjf"
+    ]
+  },
+  "burnrole": {
+        "Contract": [
+          {
+            "index": 9273,
+            "subindex": 0
+          }
+        ]
+  },
+  "mintrole": {
+     "Contract": [
+          {
+            "index": 9273,
+            "subindex": 0
+          }
+        ]
+  },
+  "pauserole": {
+    "Account": [
+      "3ipmAeMSPvfZdxyoNq8UqETXWxwFCVUwdTXggeNAKdTpo62Sjf"
+    ]
+  }
+ }
+   ```
+### UI
 
 - **UI Module:** [GitHub Link](https://github.com/raks0078/DAAPCCD)
 - **UI Deployment:** [Vercel App Link](https://daapccd.vercel.app/)
