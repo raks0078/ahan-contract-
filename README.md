@@ -96,7 +96,7 @@ This document provides a step-by-step guide for deploying and configuring the Co
    ```
 3. **Grant Roles to Staking Contract:**
    - Grant 'mintrole' and 'burnrole' to the Staking Contract address on the Liquid EUROe token contract instance.
-   ```json
+```json
    {
   "adminrole": {    
     "Account": [
@@ -130,7 +130,7 @@ This document provides a step-by-step guide for deploying and configuring the Co
     ]
   }
  }
-   ```
+```
 ### UI
 
 - **UI Module:** [GitHub Link](https://github.com/raks0078/DAAPCCD)
