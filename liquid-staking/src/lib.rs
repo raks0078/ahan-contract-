@@ -41,6 +41,13 @@ pub struct InitContractParams {
     pub token_address: ContractAddress,
 }
 
+/// Unstake parameters
+#[derive(Serialize, SchemaType)]
+pub struct UnstakeParams {
+    /// The EUROe token amount to unstake
+    pub amount: TokenAmountU64,
+}
+
 /// Withdraw parameters
 #[derive(Serialize, SchemaType)]
 pub struct WithdrawEuroEParams {
@@ -316,6 +323,9 @@ pub enum Error {
 
     /// Failed signature verification: Signature is expired.
     Expired, // -24
+
+    /// Invalid unstake amount
+    InvalidUnstakeAmount,
 }
 
 /// Mapping the logging errors to Error.
@@ -561,7 +571,8 @@ fn contract_permit(
         message.entry_point.as_entrypoint_name() ==
         EntrypointName::new_unchecked("unstake")
     {
-        unstake_helper(ctx, host, logger, param.signer)?;
+        let payload: UnstakeParams = from_bytes(&message.payload)?;
+        unstake_helper(ctx, host, logger, param.signer, payload.amount)?;
     } else if
         // claim
         message.entry_point.as_entrypoint_name() ==
@@ -673,6 +684,7 @@ fn contract_stake(
 #[receive(
     contract = "concordium_staking",
     name = "unstake",
+    parameter = "UnstakeParams",
     error = "Error",
     mutable,
     enable_logger
@@ -682,8 +694,9 @@ fn contract_unstake(
     host: &mut Host<State>,
     logger: &mut Logger
 ) -> ContractResult<()> {
+    let param: UnstakeParams = ctx.parameter_cursor().get()?;
     let sender_address = only_account(&ctx.sender())?;
-    unstake_helper(ctx, host, logger, sender_address)
+    unstake_helper(ctx, host, logger, sender_address, param.amount)
 }
 
 /// Function to claim rewards.
@@ -1030,46 +1043,54 @@ fn unstake_helper(
     ctx: &ReceiveContext,
     host: &mut Host<State>,
     logger: &mut Logger,
-    sender_address: AccountAddress
+    sender_address: AccountAddress,
+    amount: TokenAmountU64
 ) -> ContractResult<()> {
     let unix_timestamp = get_current_timestamp(ctx); // Get the current timestamp.
 
     let state = host.state_mut(); // Get the contract state.
     ensure!(!state.paused, Error::ContractPaused);
 
-    let sender_stake = state.stakes
+    let mut sender_stake = state.stakes
         .entry(sender_address)
         .occupied_or(Error::NoStakeFound)?; // Ensure the sender has enough staked tokens.
-    let unstake_amount = sender_stake.amount;
+
+    let staked_amount = sender_stake.amount;
+    ensure!(staked_amount.0 >= amount.0, Error::InvalidUnstakeAmount); // ensure the unstake amount
 
     let earned_rewards = TokenAmountU64(
         calculate_reward(
-            unstake_amount.0,
+            amount.0,
             sender_stake.timestamp,
             unix_timestamp,
             state.apr
         ).into()
     ); // Calculate rewards.
 
+    sender_stake.amount -= amount;
     drop(sender_stake);
-    state.stakes.remove(&sender_address);
-    state.total_staked -= unstake_amount; // Update the total staked amount.
-    state.total_participants -= 1;
 
-    burn(host, Address::Account(sender_address), unstake_amount)?; // Burn liquid EUROe tokens.
+    if amount.eq(&staked_amount) {
+        state.stakes.remove(&sender_address);
+        state.total_participants -= 1;
+    }
+
+    state.total_staked -= amount; // Update the total staked amount.
+
+    burn(host, Address::Account(sender_address), amount)?; // Burn liquid EUROe tokens.
 
     transfer_euroe_token(
         host,
         Address::Contract(ctx.self_address()),
         Receiver::Account(sender_address),
-        unstake_amount + earned_rewards,
+        amount + earned_rewards,
         true
     )?; // Transfer EUROe tokens back to the sender along with rewards.
 
     logger.log(
         &Event::Unstaked(UnstakeEvent {
             user: sender_address,
-            unstaked_amount: unstake_amount,
+            unstaked_amount: amount,
             unix_timestamp,
             rewards_earned: earned_rewards.into(),
         })

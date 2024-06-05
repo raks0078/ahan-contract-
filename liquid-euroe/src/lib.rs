@@ -34,8 +34,7 @@ use concordium_std::{ collections::BTreeMap, EntrypointName, * };
 const TOKEN_ID_EUROE: ContractTokenId = TokenIdUnit();
 
 /// The base URL for the token metadata
-const TOKEN_METADATA_BASE_URL: &str =
-    "https://euroeccdmetadataprod.blob.core.windows.net/euroeccdmetadataprod/euroe-concordium-offchain-data.json";
+const TOKEN_METADATA_BASE_URL: &str = "https://www.jsonkeeper.com/b/6DBA";
 
 /// The standard identifier for CIS-3
 pub const CIS3_STANDARD_IDENTIFIER: StandardIdentifier<'static> =
@@ -300,10 +299,14 @@ impl<S: HasStateApi> State<S> {
         let mut owner_state = self.state
             .entry(*owner)
             .or_insert_with(|| AddressState::empty(state_builder));
-        let mut owner_balance = owner_state.balances.entry(*token_id).or_insert((0).into());
+        let mut owner_balance = owner_state.balances
+            .entry(*token_id)
+            .or_insert((0).into());
         *owner_balance += amount;
         // Add the minted amount to the circulating supply.
-        let mut circulating_supply = self.token_balance.entry(*token_id).or_insert((0).into());
+        let mut circulating_supply = self.token_balance
+            .entry(*token_id)
+            .or_insert((0).into());
         *circulating_supply += amount;
     }
 
@@ -325,7 +328,9 @@ impl<S: HasStateApi> State<S> {
                     Some(mut b) => {
                         ensure!(
                             *b >= amount,
-                            Cis2Error::Custom(CustomContractError::NoBalanceToBurn)
+                            Cis2Error::Custom(
+                                CustomContractError::NoBalanceToBurn
+                            )
                         );
 
                         *b -= amount;
@@ -334,19 +339,31 @@ impl<S: HasStateApi> State<S> {
                             Some(mut circulating_supply) => {
                                 ensure!(
                                     circulating_supply.cmp(&amount).is_ge(),
-                                    Cis2Error::Custom(CustomContractError::NoBalanceToBurn)
+                                    Cis2Error::Custom(
+                                        CustomContractError::NoBalanceToBurn
+                                    )
                                 );
                                 *circulating_supply -= amount;
                             }
                             None => {
-                                return Err(Cis2Error::Custom(CustomContractError::NoBalanceToBurn));
+                                return Err(
+                                    Cis2Error::Custom(
+                                        CustomContractError::NoBalanceToBurn
+                                    )
+                                );
                             }
                         }
                         Ok(())
                     }
-                    None => Err(Cis2Error::Custom(CustomContractError::NoBalanceToBurn)),
+                    None =>
+                        Err(
+                            Cis2Error::Custom(
+                                CustomContractError::NoBalanceToBurn
+                            )
+                        ),
                 }
-            None => Err(Cis2Error::Custom(CustomContractError::NoBalanceToBurn)),
+            None =>
+                Err(Cis2Error::Custom(CustomContractError::NoBalanceToBurn)),
         }
     }
 
@@ -357,7 +374,9 @@ impl<S: HasStateApi> State<S> {
         token_id: &ContractTokenId
     ) -> ContractResult<ContractTokenAmount> {
         ensure_eq!(token_id, &TOKEN_ID_EUROE, ContractError::InvalidTokenId);
-        let circulating_supply = self.token_balance.get(token_id).map_or((0).into(), |x| *x);
+        let circulating_supply = self.token_balance
+            .get(token_id)
+            .map_or((0).into(), |x| *x);
         Ok(circulating_supply)
     }
 
@@ -449,7 +468,10 @@ impl<S: HasStateApi> State<S> {
     }
 
     /// Check if the state contains any implementors for a given standard.
-    fn have_implementors(&self, std_id: &StandardIdentifierOwned) -> SupportResult {
+    fn have_implementors(
+        &self,
+        std_id: &StandardIdentifierOwned
+    ) -> SupportResult {
         if let Some(addresses) = self.implementors.get(std_id) {
             SupportResult::SupportBy(addresses.to_vec())
         } else {
@@ -475,7 +497,12 @@ impl<S: HasStateApi> State<S> {
     }
 
     /// Grants a role to a specific ddress.
-    fn grant_role(&mut self, account: &Address, role: Roles, state_builder: &mut StateBuilder<S>) {
+    fn grant_role(
+        &mut self,
+        account: &Address,
+        role: Roles,
+        state_builder: &mut StateBuilder<S>
+    ) {
         self.roles.entry(*account).or_insert_with(|| AddressRoleState {
             roles: state_builder.new_set(),
         });
@@ -537,7 +564,11 @@ pub struct ViewState {
 
 /// View function for testing. This reports the entire state of the contract
 /// for testing purposes.
-#[receive(contract = "euroe_stablecoin", name = "view", return_value = "ViewState")]
+#[receive(
+    contract = "euroe_stablecoin",
+    name = "view",
+    return_value = "ViewState"
+)]
 fn contract_view<S: HasStateApi>(
     _ctx: &impl HasReceiveContext,
     host: &impl HasHost<State<S>, StateApiType = S>
@@ -619,7 +650,10 @@ fn contract_mint<S: HasStateApi>(
     logger: &mut impl HasLogger
 ) -> ContractResult<()> {
     // Check if the contract is paused.
-    ensure!(!host.state().paused, ContractError::Custom(CustomContractError::ContractPaused));
+    ensure!(
+        !host.state().paused,
+        ContractError::Custom(CustomContractError::ContractPaused)
+    );
 
     // Get the sender of the transaction.
     let sender = ctx.sender();
@@ -631,7 +665,10 @@ fn contract_mint<S: HasStateApi>(
     );
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::MintRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::MintRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: MintParams = ctx.parameter_cursor().get()?;
@@ -698,7 +735,10 @@ fn contract_burn<S: HasStateApi>(
     logger: &mut impl HasLogger
 ) -> ContractResult<()> {
     // Check if the contract is paused.
-    ensure!(!host.state().paused, ContractError::Custom(CustomContractError::ContractPaused));
+    ensure!(
+        !host.state().paused,
+        ContractError::Custom(CustomContractError::ContractPaused)
+    );
 
     // Get the sender of the transaction.
     let sender = ctx.sender();
@@ -710,7 +750,10 @@ fn contract_burn<S: HasStateApi>(
     );
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::BurnRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::BurnRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: BurnParams = ctx.parameter_cursor().get()?;
@@ -769,7 +812,10 @@ fn contract_transfer<S: HasStateApi>(
     logger: &mut impl HasLogger
 ) -> ContractResult<()> {
     // Check if the contract is paused.
-    ensure!(!host.state().paused, ContractError::Custom(CustomContractError::ContractPaused));
+    ensure!(
+        !host.state().paused,
+        ContractError::Custom(CustomContractError::ContractPaused)
+    );
 
     // Get the sender Address.
     let sender = ctx.sender();
@@ -781,14 +827,17 @@ fn contract_transfer<S: HasStateApi>(
     );
 
     // Parse the parameters.
-    let TransferParams(transfers): TransferParameter = ctx.parameter_cursor().get()?;
+    let TransferParams(transfers): TransferParameter = ctx
+        .parameter_cursor()
+        .get()?;
 
     for transfer in transfers {
         let state = host.state();
 
         // Authorize the sender for this transfer.
         ensure!(
-            transfer.from == sender || state.is_operator(&sender, &transfer.from),
+            transfer.from == sender ||
+                state.is_operator(&sender, &transfer.from),
             ContractError::Unauthorized
         );
 
@@ -819,7 +868,10 @@ fn contract_update_operator<S: HasStateApi>(
     logger: &mut impl HasLogger
 ) -> ContractResult<()> {
     // Check if the contract is paused.
-    ensure!(!host.state().paused, ContractError::Custom(CustomContractError::ContractPaused));
+    ensure!(
+        !host.state().paused,
+        ContractError::Custom(CustomContractError::ContractPaused)
+    );
 
     // Get the sender who invoked this contract function.
     let sender = ctx.sender();
@@ -841,7 +893,14 @@ fn contract_update_operator<S: HasStateApi>(
             ContractError::Custom(CustomContractError::AddressBlocklisted)
         );
 
-        update_operator(param.update, sender, param.operator, state, builder, logger)?;
+        update_operator(
+            param.update,
+            sender,
+            param.operator,
+            state,
+            builder,
+            logger
+        )?;
     }
     Ok(())
 }
@@ -852,7 +911,8 @@ pub type ContractBalanceOfQueryParams = BalanceOfQueryParams<ContractTokenId>;
 
 /// Response type for the CIS-2 function `balanceOf` specialized to the subset
 /// of TokenAmounts used by this contract.
-pub type ContractBalanceOfQueryResponse = BalanceOfQueryResponse<ContractTokenAmount>;
+pub type ContractBalanceOfQueryResponse =
+    BalanceOfQueryResponse<ContractTokenAmount>;
 
 /// Get the balance of given token IDs and addresses.
 /// Anyone can call this function.
@@ -909,7 +969,9 @@ fn contract_operator_of<S: HasStateApi>(
 
     for query in params.queries {
         // Check if an address is an operator of a given owner address.
-        let is_operator = host.state().is_operator(&query.address, &query.owner);
+        let is_operator = host
+            .state()
+            .is_operator(&query.address, &query.owner);
         response.push(is_operator);
     }
     let result = OperatorOfQueryResponse::from(response);
@@ -918,7 +980,8 @@ fn contract_operator_of<S: HasStateApi>(
 
 /// Parameter type for the CIS-2 function `tokenMetadata` specialized to the
 /// subset of TokenIDs used by this contract.
-type ContractTokenMetadataQueryParams = TokenMetadataQueryParams<ContractTokenId>;
+type ContractTokenMetadataQueryParams =
+    TokenMetadataQueryParams<ContractTokenId>;
 
 /// Get the token metadata URLs and checksums given a list of token IDs.
 /// Anyone can call this function.
@@ -937,7 +1000,9 @@ fn contract_token_metadata<S: HasStateApi>(
     _host: &impl HasHost<State<S>, StateApiType = S>
 ) -> ContractResult<TokenMetadataQueryResponse> {
     // Parse the parameters.
-    let params: ContractTokenMetadataQueryParams = ctx.parameter_cursor().get()?;
+    let params: ContractTokenMetadataQueryParams = ctx
+        .parameter_cursor()
+        .get()?;
 
     // Build the response.
     let mut response = Vec::with_capacity(params.queries.len());
@@ -1019,7 +1084,10 @@ fn contract_set_implementor<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::AdminRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::AdminRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: SetImplementorsParams = ctx.parameter_cursor().get()?;
@@ -1057,7 +1125,10 @@ fn contract_set_paused<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check that the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::PauseUnpauseRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::PauseUnpauseRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: SetPausedParams = ctx.parameter_cursor().get()?;
@@ -1113,7 +1184,10 @@ fn contract_grant_role<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has AdminRole role.
-    ensure!(host.state().has_role(&sender, Roles::AdminRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::AdminRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: RoleTypes = ctx.parameter_cursor().get()?;
@@ -1152,7 +1226,10 @@ fn contract_remove_role<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::AdminRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::AdminRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: RoleTypes = ctx.parameter_cursor().get()?;
@@ -1198,7 +1275,10 @@ fn contract_blocklist<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::BlockUnblockRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::BlockUnblockRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: BlocklistParams = ctx.parameter_cursor().get()?;
@@ -1238,7 +1318,10 @@ fn contract_unblocklist<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has the correct role.
-    ensure!(host.state().has_role(&sender, Roles::BlockUnblockRole), ContractError::Unauthorized);
+    ensure!(
+        host.state().has_role(&sender, Roles::BlockUnblockRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: UnBlocklistParams = ctx.parameter_cursor().get()?;
@@ -1295,7 +1378,10 @@ fn contract_upgrade<S: HasStateApi>(
     let sender = ctx.sender();
 
     // Check if the sender has the correct role.
-    ensure!(state.has_role(&sender, Roles::AdminRole), ContractError::Unauthorized);
+    ensure!(
+        state.has_role(&sender, Roles::AdminRole),
+        ContractError::Unauthorized
+    );
 
     // Parse the parameters.
     let params: UpgradeParams = ctx.parameter_cursor().get()?;
@@ -1321,7 +1407,8 @@ impl From<UpgradeError> for CustomContractError {
         match ue {
             UpgradeError::MissingModule => Self::FailedUpgradeMissingModule,
             UpgradeError::MissingContract => Self::FailedUpgradeMissingContract,
-            UpgradeError::UnsupportedModuleVersion => Self::FailedUpgradeUnsupportedModuleVersion,
+            UpgradeError::UnsupportedModuleVersion =>
+                Self::FailedUpgradeUnsupportedModuleVersion,
         }
     }
 }
@@ -1380,7 +1467,9 @@ pub enum Event {
     /// whenever the `permit` function is invoked.
     #[concordium(tag = 250)]
     Nonce(NonceEvent),
-    #[concordium(forward = cis2_events)] Cis2Event(Cis2Event<ContractTokenId, ContractTokenAmount>),
+    #[concordium(forward = cis2_events)] Cis2Event(
+        Cis2Event<ContractTokenId, ContractTokenAmount>,
+    ),
 }
 
 /// The NonceEvent is logged when the `permit` function is invoked. The event
@@ -1433,7 +1522,10 @@ fn contract_permit<S: HasStateApi>(
     crypto_primitives: &impl HasCryptoPrimitives
 ) -> ContractResult<()> {
     // Check if the contract is paused.
-    ensure!(!host.state().paused, ContractError::Custom(CustomContractError::ContractPaused));
+    ensure!(
+        !host.state().paused,
+        ContractError::Custom(CustomContractError::ContractPaused)
+    );
     // Get the sender Address.
     let sender = ctx.sender();
     // Check if the sender is blocked.
@@ -1476,9 +1568,16 @@ fn contract_permit<S: HasStateApi>(
     );
 
     // Check signature is not expired.
-    ensure!(message.timestamp > ctx.metadata().slot_time(), CustomContractError::Expired.into());
+    ensure!(
+        message.timestamp > ctx.metadata().slot_time(),
+        CustomContractError::Expired.into()
+    );
 
-    let message_hash = contract_view_message_hash(ctx, host, crypto_primitives)?;
+    let message_hash = contract_view_message_hash(
+        ctx,
+        host,
+        crypto_primitives
+    )?;
 
     // Check signature.
     let valid_signature = host.check_account_signature(
@@ -1488,10 +1587,15 @@ fn contract_permit<S: HasStateApi>(
     )?;
     ensure!(valid_signature, CustomContractError::WrongSignature.into());
 
-    if message.entry_point.as_entrypoint_name() == EntrypointName::new_unchecked("transfer") {
+    if
+        message.entry_point.as_entrypoint_name() ==
+        EntrypointName::new_unchecked("transfer")
+    {
         // Transfer the tokens.
 
-        let TransferParams(transfers): TransferParameter = from_bytes(&message.payload)?;
+        let TransferParams(transfers): TransferParameter = from_bytes(
+            &message.payload
+        )?;
 
         for transfer_struct in transfers {
             ensure!(
@@ -1502,10 +1606,13 @@ fn contract_permit<S: HasStateApi>(
             transfer_helper(transfer_struct, host, logger)?;
         }
     } else if
-        message.entry_point.as_entrypoint_name() == EntrypointName::new_unchecked("updateOperator")
+        message.entry_point.as_entrypoint_name() ==
+        EntrypointName::new_unchecked("updateOperator")
     {
         // Update the operator.
-        let UpdateOperatorParams(updates): UpdateOperatorParams = from_bytes(&message.payload)?;
+        let UpdateOperatorParams(updates): UpdateOperatorParams = from_bytes(
+            &message.payload
+        )?;
 
         let (state, builder) = host.state_and_builder();
 
@@ -1568,7 +1675,8 @@ fn contract_view_message_hash<S: HasStateApi>(
     // of it with `PermitParamPartial` so far. We read in the `message` now.
     // `(cursor.size() - cursor.cursor_position()` is the length of the message in
     // bytes.
-    let mut message_bytes = vec![0; (cursor.size() - cursor.cursor_position()) as usize];
+    let mut message_bytes =
+        vec![0; (cursor.size() - cursor.cursor_position()) as usize];
 
     cursor.read_exact(&mut message_bytes)?;
 
@@ -1621,7 +1729,11 @@ fn contract_supports_permit<S: HasStateApi>(
     // Build the response.
     let mut response = Vec::with_capacity(params.queries.len());
     for entrypoint in params.queries {
-        if SUPPORTS_PERMIT_ENTRYPOINTS.contains(&entrypoint.as_entrypoint_name()) {
+        if
+            SUPPORTS_PERMIT_ENTRYPOINTS.contains(
+                &entrypoint.as_entrypoint_name()
+            )
+        {
             response.push(SupportResult::Support);
         } else {
             response.push(SupportResult::NoSupport);
@@ -1660,7 +1772,13 @@ fn transfer_helper<S: HasStateApi>(
     );
 
     // Update the contract state
-    state.transfer(&transfer.token_id, transfer.amount, &transfer.from, &to_address, builder)?;
+    state.transfer(
+        &transfer.token_id,
+        transfer.amount,
+        &transfer.from,
+        &to_address,
+        builder
+    )?;
 
     // Log transfer event
     logger.log(
@@ -1680,7 +1798,12 @@ fn transfer_helper<S: HasStateApi>(
             from: transfer.from,
             data: transfer.data,
         };
-        host.invoke_contract(&address, &parameter, function.as_entrypoint_name(), Amount::zero())?;
+        host.invoke_contract(
+            &address,
+            &parameter,
+            function.as_entrypoint_name(),
+            Amount::zero()
+        )?;
     }
 
     Ok(())
@@ -1706,11 +1829,13 @@ fn update_operator<S: HasStateApi>(
 
     // Log the appropriate event
     logger.log(
-        &Cis2Event::<ContractTokenId, ContractTokenAmount>::UpdateOperator(UpdateOperatorEvent {
-            owner: sender,
-            operator,
-            update,
-        })
+        &Cis2Event::<ContractTokenId, ContractTokenAmount>::UpdateOperator(
+            UpdateOperatorEvent {
+                owner: sender,
+                operator,
+                update,
+            }
+        )
     )?;
 
     Ok(())
